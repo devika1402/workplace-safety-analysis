@@ -1,0 +1,227 @@
+version: 2
+
+models:
+  - name: int_incidents__joined
+    description: >
+      One row per incident with establishment context resolved by joining case
+      detail to the establishment model on establishment_id.
+    columns:
+      - name: incident_id
+        description: Incident surrogate key. Primary key.
+        tests:
+          - not_null
+          - unique
+      - name: osha_case_id
+        description: Source OSHA case id, kept for traceability.
+      - name: case_number
+        description: Employer-assigned case number.
+      - name: establishment_id
+        description: Establishment surrogate key (foreign key).
+        tests:
+          - not_null
+      - name: incident_date
+        description: Date the incident occurred.
+      - name: death_date
+        description: Date of death, when fatal (else null).
+      - name: created_at
+        description: Timestamp the record was created in the OSHA system.
+      - name: filing_year
+        description: Calendar year the case was filed.
+      - name: outcome_code
+        description: OSHA outcome code (1 to 4).
+      - name: incident_type_code
+        description: OSHA type-of-incident code.
+      - name: days_away_from_work
+        description: Days the employee was away from work.
+      - name: days_restricted
+        description: Days of job transfer or restriction.
+      - name: is_death
+        description: True when the outcome is a fatality.
+      - name: is_dafw
+        description: True when the outcome is days away from work.
+      - name: soc_code
+        description: Standard Occupational Classification code.
+      - name: soc_description
+        description: SOC occupation title.
+      - name: job_description
+        description: Free-text job title or description.
+      - name: establishment_name
+        description: Establishment name.
+      - name: company_name
+        description: Parent company name.
+      - name: ein
+        description: Employer Identification Number.
+      - name: street_address
+        description: Establishment street address.
+      - name: city
+        description: Establishment city.
+      - name: state
+        description: Establishment state (two-letter code).
+      - name: zip_code
+        description: Establishment ZIP code (text).
+      - name: naics_code
+        description: NAICS industry code.
+      - name: naics_year
+        description: NAICS vintage year.
+      - name: industry_description
+        description: NAICS industry description.
+      - name: ownership_type_code
+        description: Ownership type code (1 private, 2 state, 3 local).
+      - name: employee_size_code
+        description: Raw OSHA establishment size code.
+      - name: annual_average_employees
+        description: Annual average number of employees.
+      - name: total_hours_worked
+        description: Total hours worked in the year.
+      - name: narrative_location
+        description: Where the incident happened (narrative).
+      - name: narrative_description
+        description: Incident description (narrative).
+      - name: narrative_activity
+        description: What the employee was doing (narrative).
+      - name: narrative_event
+        description: What happened (narrative).
+      - name: narrative_injury
+        description: Injury or illness description (narrative).
+      - name: narrative_source
+        description: Object or substance involved (narrative).
+      - name: oiics_nature_code
+        description: OIICS nature-of-injury code (BLS autocoder).
+      - name: oiics_nature_label
+        description: OIICS nature-of-injury label.
+      - name: oiics_body_part_code
+        description: OIICS part-of-body code (BLS autocoder).
+      - name: oiics_body_part_label
+        description: OIICS part-of-body label.
+      - name: oiics_event_code
+        description: OIICS event code (BLS autocoder).
+      - name: oiics_event_label
+        description: OIICS event label.
+      - name: oiics_source_code
+        description: OIICS primary source-of-injury code (BLS autocoder).
+      - name: oiics_source_label
+        description: OIICS primary source-of-injury label.
+      - name: oiics_sec_source_code
+        description: OIICS secondary source-of-injury code (BLS autocoder).
+      - name: oiics_sec_source_label
+        description: OIICS secondary source-of-injury label.
+
+  - name: int_incidents__enriched
+    description: >
+      int_incidents__joined left joined to the LLM enrichment. Incidents without
+      enrichment flow through with null llm_* columns. Carries every
+      int_incidents__joined column plus the enrichment columns below.
+    columns:
+      - name: incident_id
+        description: Incident surrogate key. Primary key.
+        tests:
+          - not_null
+          - unique
+      - name: osha_case_id
+        description: Source OSHA case id, kept for traceability.
+      - name: case_number
+        description: Employer-assigned case number.
+      - name: establishment_id
+        description: Establishment surrogate key (foreign key).
+      - name: incident_date
+        description: Date the incident occurred.
+      - name: death_date
+        description: Date of death, when fatal (else null).
+      - name: created_at
+        description: Timestamp the record was created in the OSHA system.
+      - name: filing_year
+        description: Calendar year the case was filed.
+      - name: outcome_code
+        description: OSHA outcome code (1 to 4).
+      - name: incident_type_code
+        description: OSHA type-of-incident code.
+      - name: days_away_from_work
+        description: Days the employee was away from work.
+      - name: days_restricted
+        description: Days of job transfer or restriction.
+      - name: is_death
+        description: True when the outcome is a fatality.
+      - name: is_dafw
+        description: True when the outcome is days away from work.
+      - name: soc_code
+        description: Standard Occupational Classification code.
+      - name: soc_description
+        description: SOC occupation title.
+      - name: job_description
+        description: Free-text job title or description.
+      - name: establishment_name
+        description: Establishment name.
+      - name: company_name
+        description: Parent company name.
+      - name: ein
+        description: Employer Identification Number.
+      - name: street_address
+        description: Establishment street address.
+      - name: city
+        description: Establishment city.
+      - name: state
+        description: Establishment state (two-letter code).
+      - name: zip_code
+        description: Establishment ZIP code (text).
+      - name: naics_code
+        description: NAICS industry code.
+      - name: naics_year
+        description: NAICS vintage year.
+      - name: industry_description
+        description: NAICS industry description.
+      - name: ownership_type_code
+        description: Ownership type code (1 private, 2 state, 3 local).
+      - name: employee_size_code
+        description: Raw OSHA establishment size code.
+      - name: annual_average_employees
+        description: Annual average number of employees.
+      - name: total_hours_worked
+        description: Total hours worked in the year.
+      - name: narrative_location
+        description: Where the incident happened (narrative).
+      - name: narrative_description
+        description: Incident description (narrative).
+      - name: narrative_activity
+        description: What the employee was doing (narrative).
+      - name: narrative_event
+        description: What happened (narrative).
+      - name: narrative_injury
+        description: Injury or illness description (narrative).
+      - name: narrative_source
+        description: Object or substance involved (narrative).
+      - name: oiics_nature_code
+        description: OIICS nature-of-injury code (BLS autocoder).
+      - name: oiics_nature_label
+        description: OIICS nature-of-injury label.
+      - name: oiics_body_part_code
+        description: OIICS part-of-body code (BLS autocoder).
+      - name: oiics_body_part_label
+        description: OIICS part-of-body label.
+      - name: oiics_event_code
+        description: OIICS event code (BLS autocoder).
+      - name: oiics_event_label
+        description: OIICS event label.
+      - name: oiics_source_code
+        description: OIICS primary source-of-injury code (BLS autocoder).
+      - name: oiics_source_label
+        description: OIICS primary source-of-injury label.
+      - name: oiics_sec_source_code
+        description: OIICS secondary source-of-injury code (BLS autocoder).
+      - name: oiics_sec_source_label
+        description: OIICS secondary source-of-injury label.
+      - name: llm_contributing_factor
+        description: LLM-extracted primary contributing factor (null if not enriched).
+      - name: llm_severity_tier
+        description: LLM severity tier (null if not enriched).
+      - name: llm_event_category
+        description: LLM coarse event category (null if not enriched).
+      - name: llm_recurrence_action
+        description: LLM-suggested recurrence-prevention action (null if not enriched).
+      - name: llm_confidence
+        description: LLM self-reported confidence, 0 to 1 (null if not enriched).
+      - name: llm_prompt_version
+        description: Prompt version that produced the classification.
+      - name: llm_model_name
+        description: Model that produced the classification.
+      - name: llm_enriched_at
+        description: Timestamp the classification was written.

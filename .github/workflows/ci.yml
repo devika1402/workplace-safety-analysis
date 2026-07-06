@@ -1,0 +1,93 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint-and-type:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dev dependencies
+        run: pip install -e ".[dev]"
+      - name: Ruff lint
+        run: ruff check .
+      - name: Ruff format check
+        run: ruff format --check .
+      - name: Mypy
+        run: mypy ingestion enrichment config dags
+
+  unit-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dev dependencies
+        run: pip install -e ".[dev]"
+      # The LLM client is mocked in the tests, so no Ollama and no API key are
+      # needed or used in CI.
+      - name: Pytest
+        run: pytest
+
+  dbt-build:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: ehss
+          POSTGRES_PASSWORD: ehss
+          POSTGRES_DB: ehss
+        ports:
+          - "5432:5432"
+        options: >-
+          --health-cmd "pg_isready -U ehss"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      POSTGRES_HOST: localhost
+      POSTGRES_PORT: "5432"
+      POSTGRES_USER: ehss
+      POSTGRES_PASSWORD: ehss
+      POSTGRES_DB: ehss
+      DBT_SCHEMA: marts
+      DBT_PROFILES_DIR: ${{ github.workspace }}/dbt/ehss
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dbt
+        run: pip install ".[dbt]"
+      # Seed committed fixtures into the raw schema. CI does not download from
+      # OSHA and does not call the LLM; it proves the dbt layer builds and passes
+      # its tests against known fixtures.
+      - name: Seed raw fixture
+        run: |
+          python - <<'PY'
+          import psycopg2
+          dsn = "postgresql://ehss:ehss@localhost:5432/ehss"
+          with open("tests/fixtures/sample_raw.sql") as handle:
+              sql = handle.read()
+          conn = psycopg2.connect(dsn)
+          conn.autocommit = True
+          with conn.cursor() as cur:
+              cur.execute(sql)
+          conn.close()
+          print("seeded raw fixture")
+          PY
+      - name: dbt deps
+        run: dbt deps --project-dir dbt/ehss
+      - name: dbt build
+        run: dbt build --project-dir dbt/ehss
+      - name: dbt test
+        run: dbt test --project-dir dbt/ehss

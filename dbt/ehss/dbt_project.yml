@@ -1,0 +1,32 @@
+name: "ehss"
+version: "1.0.0"
+config-version: 2
+
+profile: "ehss"
+
+model-paths: ["models"]
+test-paths: ["tests"]
+macro-paths: ["macros"]
+seed-paths: ["seeds"]
+
+target-path: "target"
+clean-targets:
+  - "target"
+  - "dbt_packages"
+
+# Configurable thresholds used by singular tests.
+vars:
+  min_enrichment_coverage: 0.90
+
+# Layering per PRD section 5: staging and intermediate as views, marts as tables.
+models:
+  ehss:
+    staging:
+      +materialized: view
+      +schema: staging
+    intermediate:
+      +materialized: view
+      +schema: intermediate
+    marts:
+      +materialized: table
+      +schema: marts

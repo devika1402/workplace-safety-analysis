@@ -1,0 +1,99 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ehss-incident-intelligence"
+version = "0.1.0"
+description = "OSHA injury data pipeline: Postgres and dbt warehouse with LLM enrichment, orchestrated by Airflow."
+readme = "README.md"
+requires-python = ">=3.11,<3.13"
+authors = [{ name = "Devika Rajasekar" }]
+
+# Runtime dependencies for the application code (config, ingestion, enrichment).
+# Airflow and dbt are heavy and version sensitive, so they live in the optional
+# groups below. The Airflow Docker image already ships Airflow, and dbt runs in
+# its own isolated virtualenv (see Dockerfile) to avoid dependency clashes.
+dependencies = [
+    # pandas is pinned below 2.2 to match the Airflow base image providers
+    # (apache-airflow-providers-google/snowflake require pandas<2.2).
+    "pandas==2.1.4",
+    "psycopg2-binary==2.9.10",
+    "requests==2.32.3",
+    "python-dotenv==1.0.1",
+    "pydantic==2.10.6",
+    "pydantic-settings==2.7.1",
+    "SQLAlchemy==1.4.54",
+    "openai==1.59.6",
+]
+
+[project.optional-dependencies]
+# Linting, typing, and testing. Used by the CI lint-and-type and unit-tests jobs.
+# Stub packages use compatible ranges because their micro versions churn often.
+dev = [
+    "ruff==0.9.6",
+    "mypy==1.15.0",
+    "pytest==8.3.4",
+    "pandas-stubs>=2.1,<2.2",
+    "types-requests>=2.32,<3",
+]
+# Airflow orchestration. Pinned here for the record. The Docker image installs
+# Airflow from the official base image rather than from this group.
+airflow = [
+    "apache-airflow==2.10.4",
+]
+# dbt transformation layer. Installed into a dedicated virtualenv in the image.
+# Note: dbt-utils and dbt-expectations are dbt hub packages (see
+# dbt/ehss/packages.yml), not PyPI packages, so they are not listed here.
+dbt = [
+    "dbt-core==1.9.1",
+    "dbt-postgres==1.9.1",
+]
+
+[tool.setuptools.packages.find]
+include = ["config*", "ingestion*", "enrichment*", "dags*"]
+namespaces = true
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "C4", "SIM", "D"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.lint.per-file-ignores]
+# Test modules use fixtures and helper stubs that do not need docstring coverage.
+"tests/*" = ["D"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+namespace_packages = true
+explicit_package_bases = true
+mypy_path = "."
+
+[[tool.mypy.overrides]]
+# Third-party libraries that ship without type information. SQLAlchemy is pinned
+# to the 1.4 series for Airflow compatibility, and 1.4 has no py.typed marker.
+# Airflow is provided by the runtime image, not the dev/CI venv, so its imports
+# are treated as missing here.
+module = [
+    "psycopg2.*",
+    "sqlalchemy.*",
+    "airflow.*",
+]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+# Airflow's @dag / @task decorators are untyped (Any) when Airflow is not
+# installed for type checking, so allow them on the DAG module only.
+module = ["dags.*"]
+disallow_untyped_decorators = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "-q"

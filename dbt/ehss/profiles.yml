@@ -1,0 +1,14 @@
+# dbt connection profile. Points at the Postgres service. All values come from
+# the environment so no credentials live in the repo.
+ehss:
+  target: dev
+  outputs:
+    dev:
+      type: postgres
+      host: "{{ env_var('POSTGRES_HOST', 'postgres') }}"
+      port: "{{ env_var('POSTGRES_PORT', '5432') | int }}"
+      user: "{{ env_var('POSTGRES_USER', 'ehss') }}"
+      password: "{{ env_var('POSTGRES_PASSWORD', 'ehss') }}"
+      dbname: "{{ env_var('POSTGRES_DB', 'ehss') }}"
+      schema: "{{ env_var('DBT_SCHEMA', 'marts') }}"
+      threads: 4

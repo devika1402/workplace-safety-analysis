@@ -1,0 +1,29 @@
+# Secrets and local environment
+.env
+
+# Data artifacts (downloaded and sampled OSHA files)
+data/
+
+# Python build and cache
+__pycache__/
+*.pyc
+*.egg-info/
+.venv/
+
+# Tooling caches
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+
+# dbt build artifacts
+dbt/ehss/target/
+dbt/ehss/logs/
+dbt/ehss/dbt_packages/
+dbt/ehss/.user.yml
+
+# OS junk
+.DS_Store
+
+# Local-only docs: kept on disk for reference, intentionally not published.
+CLAUDE.md
+PRD_EHSS_Incident_Intelligence_Pipeline.md

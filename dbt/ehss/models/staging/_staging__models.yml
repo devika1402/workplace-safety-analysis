@@ -1,0 +1,173 @@
+version: 2
+
+models:
+  - name: stg_osha__case_detail
+    description: >
+      Cleaned OSHA case detail, one row per reported case that has at least one
+      non-null narrative. Dates and measures are cast, the six narrative fields
+      are renamed, and the OIICS autocoder codes are surfaced. Materialized as a
+      view.
+    columns:
+      - name: incident_id
+        description: Surrogate key (hash of the OSHA case id). Primary key.
+        tests:
+          - not_null
+          - unique
+      - name: osha_case_id
+        description: Source OSHA case id, kept for traceability.
+      - name: case_number
+        description: Employer-assigned case number from the OSHA form.
+      - name: establishment_id
+        description: >
+          Surrogate key of the establishment (hash of the source establishment
+          id). Foreign key to stg_osha__establishments.
+        tests:
+          - not_null
+      - name: incident_date
+        description: Date the incident occurred.
+      - name: death_date
+        description: Date of death, when the incident was fatal (else null).
+      - name: created_at
+        description: Timestamp the record was created in the OSHA system.
+      - name: filing_year
+        description: Calendar year the case was filed.
+      - name: outcome_code
+        description: >
+          Incident outcome code: 1 death, 2 days away from work, 3 job transfer
+          or restriction, 4 other recordable.
+        tests:
+          - accepted_values:
+              values: [1, 2, 3, 4]
+              quote: false
+      - name: incident_type_code
+        description: OSHA type-of-incident code.
+      - name: days_away_from_work
+        description: Number of days the employee was away from work.
+      - name: days_restricted
+        description: Number of days of job transfer or restriction.
+      - name: is_death
+        description: True when the outcome is a fatality (outcome_code = 1).
+      - name: is_dafw
+        description: True when the outcome is days away from work (outcome_code = 2).
+      - name: soc_code
+        description: Standard Occupational Classification code for the worker.
+      - name: soc_description
+        description: Human-readable SOC occupation title.
+      - name: job_description
+        description: Free-text job title or description from the form.
+      - name: naics_code
+        description: NAICS industry code of the establishment.
+      - name: industry_description
+        description: NAICS industry description.
+      - name: city
+        description: Establishment city.
+      - name: state
+        description: Establishment state (two-letter code).
+      - name: zip_code
+        description: Establishment ZIP code (kept as text to preserve leading zeros).
+      - name: establishment_name
+        description: Establishment name, carried for the downstream join.
+      - name: company_name
+        description: Parent company name, carried for the downstream join.
+      - name: narrative_location
+        description: Where the incident happened (from NEW_INCIDENT_LOCATION).
+      - name: narrative_description
+        description: Incident description (from NEW_INCIDENT_DESCRIPTION).
+      - name: narrative_activity
+        description: What the employee was doing before the incident (from NEW_NAR_BEFORE_INCIDENT).
+      - name: narrative_event
+        description: What happened and how the injury occurred (from NEW_NAR_WHAT_HAPPENED).
+      - name: narrative_injury
+        description: Description of the injury or illness (from NEW_NAR_INJURY_ILLNESS).
+      - name: narrative_source
+        description: Object or substance that caused the harm (from NEW_NAR_OBJECT_SUBSTANCE).
+      - name: oiics_nature_code
+        description: OIICS nature-of-injury code (BLS autocoder).
+      - name: oiics_nature_label
+        description: OIICS nature-of-injury label.
+      - name: oiics_body_part_code
+        description: OIICS part-of-body code (BLS autocoder).
+      - name: oiics_body_part_label
+        description: OIICS part-of-body label.
+      - name: oiics_event_code
+        description: OIICS event code, how the injury was caused (BLS autocoder).
+      - name: oiics_event_label
+        description: OIICS event label.
+      - name: oiics_source_code
+        description: OIICS primary source-of-injury code (BLS autocoder).
+      - name: oiics_source_label
+        description: OIICS primary source-of-injury label.
+      - name: oiics_sec_source_code
+        description: OIICS secondary source-of-injury code (BLS autocoder).
+      - name: oiics_sec_source_label
+        description: OIICS secondary source-of-injury label.
+
+  - name: stg_osha__establishments
+    description: >
+      Establishment dimension source, one row per establishment, deduplicated
+      from the case detail data. Materialized as a view.
+    columns:
+      - name: establishment_id
+        description: Surrogate key (hash of the source establishment id). Primary key.
+        tests:
+          - not_null
+          - unique
+      - name: osha_establishment_id
+        description: Source OSHA establishment id, kept for traceability.
+      - name: establishment_name
+        description: Establishment name.
+      - name: company_name
+        description: Parent company name.
+      - name: ein
+        description: Employer Identification Number (kept as text).
+      - name: street_address
+        description: Establishment street address.
+      - name: city
+        description: Establishment city.
+      - name: state
+        description: Establishment state (two-letter code).
+      - name: zip_code
+        description: Establishment ZIP code (kept as text to preserve leading zeros).
+      - name: naics_code
+        description: NAICS industry code.
+      - name: naics_year
+        description: NAICS vintage year.
+      - name: industry_description
+        description: NAICS industry description.
+      - name: ownership_type_code
+        description: >
+          Ownership type code (from establishment_type): 1 private, 2 state
+          government, 3 local government. Labelled in the mart layer.
+      - name: employee_size_code
+        description: Employee size-bucket code (from size). Labelled in the mart layer.
+      - name: annual_average_employees
+        description: Annual average number of employees at the establishment.
+      - name: total_hours_worked
+        description: Total hours worked at the establishment in the year.
+
+  - name: stg_llm__enrichment
+    description: >
+      Typed view over the raw LLM enrichment output, one row per classified
+      incident, renamed to llm_* columns for the marts.
+    columns:
+      - name: incident_id
+        description: Incident this classification belongs to. Primary key.
+        tests:
+          - not_null
+          - unique
+      - name: llm_contributing_factor
+        description: Primary contributing factor in one short phrase.
+      - name: llm_severity_tier
+        description: Severity tier (minor, moderate, serious, severe).
+      - name: llm_event_category
+        description: Coarse event category from the model (EventCategory enum).
+      - name: llm_recurrence_action
+        description: One concrete action that could prevent recurrence.
+      - name: llm_confidence
+        description: Model self-reported confidence, 0 to 1.
+      - name: prompt_version
+        description: Prompt version that produced the classification.
+      - name: model_name
+        description: Model that produced the classification.
+      - name: enriched_at
+        description: Timestamp the classification was written.

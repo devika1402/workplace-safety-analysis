@@ -1,0 +1,95 @@
+# Local stack for the EHS&S Incident Intelligence Pipeline.
+# Postgres warehouse plus Airflow (LocalExecutor): init, scheduler, webserver.
+# Copy .env.example to .env before running: docker compose up -d
+
+x-airflow-common: &airflow-common
+  build:
+    context: .
+    dockerfile: Dockerfile
+  env_file:
+    - .env
+  environment:
+    AIRFLOW__CORE__EXECUTOR: LocalExecutor
+    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+    AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+    AIRFLOW__CORE__FERNET_KEY: ${AIRFLOW_FERNET_KEY}
+    AIRFLOW__WEBSERVER__SECRET_KEY: ${AIRFLOW_SECRET_KEY}
+    AIRFLOW__CORE__DAGS_FOLDER: /opt/airflow/dags
+    # Make the project code importable and point dbt at its profile.
+    PYTHONPATH: /opt/airflow/project
+    DBT_PROFILES_DIR: /opt/airflow/project/dbt/ehss
+    # The pipeline runs inside this container; the enrichment task must reach the
+    # host's Ollama server (overrides the localhost value in .env).
+    OLLAMA_BASE_URL: http://host.docker.internal:11434/v1
+  extra_hosts:
+    # Resolve host.docker.internal on Linux too (Docker Desktop provides it).
+    - "host.docker.internal:host-gateway"
+  volumes:
+    - ./dags:/opt/airflow/dags
+    - ./config:/opt/airflow/project/config
+    - ./ingestion:/opt/airflow/project/ingestion
+    - ./enrichment:/opt/airflow/project/enrichment
+    - ./dbt:/opt/airflow/project/dbt
+    - ./data:/opt/airflow/project/data
+    - airflow-logs:/opt/airflow/logs
+  depends_on:
+    postgres:
+      condition: service_healthy
+
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # Runs database migrations and creates the admin user, then exits.
+  airflow-init:
+    <<: *airflow-common
+    entrypoint: /bin/bash
+    command:
+      - -c
+      - |
+        airflow db migrate
+        airflow users create \
+          --username "${_AIRFLOW_WWW_USER_USERNAME:-admin}" \
+          --password "${_AIRFLOW_WWW_USER_PASSWORD:-admin}" \
+          --firstname Admin --lastname User --role Admin \
+          --email admin@example.com || true
+    restart: on-failure
+
+  airflow-scheduler:
+    <<: *airflow-common
+    command: scheduler
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      airflow-init:
+        condition: service_completed_successfully
+
+  airflow-webserver:
+    <<: *airflow-common
+    command: webserver
+    ports:
+      - "8080:8080"
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      airflow-init:
+        condition: service_completed_successfully
+
+volumes:
+  postgres-data:
+  airflow-logs:

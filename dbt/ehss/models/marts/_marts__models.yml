@@ -1,0 +1,253 @@
+version: 2
+
+models:
+  - name: dim_establishment
+    description: Establishment dimension, one row per establishment.
+    columns:
+      - name: establishment_id
+        description: Establishment surrogate key. Primary key.
+        tests:
+          - not_null
+          - unique
+      - name: establishment_name
+        description: Establishment name.
+      - name: company_name
+        description: Parent company name.
+      - name: ein
+        description: Employer Identification Number.
+      - name: employee_size_bucket
+        description: Size bucket derived from annual_average_employees.
+        tests:
+          - accepted_values:
+              values:
+                - "Small (under 50)"
+                - "Medium (50 to 249)"
+                - "Large (250 to 999)"
+                - "Very large (1000 or more)"
+                - "Unknown"
+      - name: ownership_type
+        description: Ownership type label derived from the OSHA establishment type.
+        tests:
+          - accepted_values:
+              values: ["Private", "State government", "Local government", "Unknown"]
+
+  - name: dim_industry
+    description: Industry dimension, one row per NAICS code.
+    columns:
+      - name: industry_id
+        description: Industry surrogate key (hash of naics_code). Primary key.
+        tests:
+          - not_null
+          - unique
+      - name: naics_code
+        description: NAICS industry code.
+      - name: naics_title
+        description: NAICS industry description.
+      - name: sector
+        description: Sector name derived from the first two NAICS digits.
+
+  - name: dim_geography
+    description: Geography dimension, one row per distinct city, state, and ZIP.
+    columns:
+      - name: geography_id
+        description: Geography surrogate key. Primary key.
+        tests:
+          - not_null
+          - unique
+      - name: city
+        description: Establishment city.
+      - name: state
+        description: Establishment state (two-letter code).
+      - name: zip_code
+        description: Establishment ZIP code (text, leading zeros preserved).
+      - name: region
+        description: US census region derived from the state.
+
+  - name: dim_injury_type
+    description: >
+      Injury type dimension, one row per distinct outcome and OIICS nature, body
+      part, and event combination.
+    columns:
+      - name: injury_type_id
+        description: Injury type surrogate key. Primary key.
+        tests:
+          - not_null
+          - unique
+      - name: outcome
+        description: Outcome label (death, days away, transfer/restriction, other).
+        tests:
+          - accepted_values:
+              values:
+                - "Death"
+                - "Days away from work"
+                - "Job transfer or restriction"
+                - "Other recordable"
+                - "Unknown"
+      - name: outcome_code
+        description: Raw OSHA outcome code (1 to 4).
+      - name: oiics_nature_code
+        description: OIICS nature-of-injury code (BLS autocoder).
+      - name: oiics_nature_label
+        description: OIICS nature-of-injury label.
+      - name: oiics_body_part_code
+        description: OIICS part-of-body code (BLS autocoder).
+      - name: oiics_body_part_label
+        description: OIICS part-of-body label.
+      - name: oiics_event_code
+        description: OIICS event code (BLS autocoder).
+      - name: oiics_event_label
+        description: OIICS event label.
+
+  - name: dim_date
+    description: Date dimension, one row per distinct incident date.
+    columns:
+      - name: date_id
+        description: Date surrogate key. Primary key.
+        tests:
+          - not_null
+          - unique
+      - name: full_date
+        description: The incident date.
+      - name: year
+        description: Calendar year of the incident date.
+      - name: quarter
+        description: Calendar quarter (1 to 4) of the incident date.
+      - name: month
+        description: Calendar month (1 to 12) of the incident date.
+
+  - name: fct_incidents
+    description: >
+      Incident fact table. Grain is one row per reported OSHA case, with
+      dimension foreign keys, measures, LLM enrichment, and narrative text.
+    tests:
+      - dbt_expectations.expect_table_row_count_to_be_between:
+          min_value: 1
+    columns:
+      - name: incident_id
+        description: Incident surrogate key. Primary key.
+        tests:
+          - not_null
+          - unique
+      - name: establishment_id
+        description: Foreign key to dim_establishment.
+        tests:
+          - relationships:
+              to: ref('dim_establishment')
+              field: establishment_id
+      - name: industry_id
+        description: Foreign key to dim_industry.
+        tests:
+          - relationships:
+              to: ref('dim_industry')
+              field: industry_id
+      - name: geography_id
+        description: Foreign key to dim_geography.
+        tests:
+          - relationships:
+              to: ref('dim_geography')
+              field: geography_id
+      - name: injury_type_id
+        description: Foreign key to dim_injury_type.
+        tests:
+          - relationships:
+              to: ref('dim_injury_type')
+              field: injury_type_id
+      - name: date_id
+        description: Foreign key to dim_date.
+        tests:
+          - relationships:
+              to: ref('dim_date')
+              field: date_id
+      - name: days_away_from_work
+        description: Number of days the employee was away from work.
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 365
+              row_condition: "days_away_from_work is not null"
+      - name: days_restricted
+        description: Number of days of job transfer or restriction.
+      - name: is_death
+        description: True when the outcome is a fatality.
+      - name: is_dafw
+        description: True when the outcome is days away from work.
+      - name: outcome_code
+        description: Raw OSHA outcome code (1 to 4).
+        tests:
+          - accepted_values:
+              values: [1, 2, 3, 4]
+              quote: false
+      - name: oiics_event_code
+        description: OIICS event code (BLS autocoder ground truth).
+      - name: oiics_event_label
+        description: OIICS event label.
+      - name: incident_date
+        description: Date the incident occurred.
+      - name: llm_contributing_factor
+        description: LLM-extracted primary contributing factor (null if not enriched).
+      - name: llm_severity_tier
+        description: LLM severity tier (null if not enriched).
+        tests:
+          - accepted_values:
+              values: ["minor", "moderate", "serious", "severe"]
+      - name: llm_recurrence_action
+        description: LLM-suggested concrete recurrence-prevention action.
+      - name: llm_event_category
+        description: LLM coarse event category (null if not enriched).
+        tests:
+          - accepted_values:
+              values:
+                - "struck_by_or_against"
+                - "fall_slip_trip"
+                - "overexertion_bodily_reaction"
+                - "exposure_harmful_substance"
+                - "contact_with_equipment"
+                - "transportation"
+                - "fire_explosion"
+                - "violence"
+                - "other"
+      - name: llm_confidence
+        description: LLM self-reported confidence, 0 to 1 (null if not enriched).
+      - name: narrative_location
+        description: Where the incident happened (source narrative).
+      - name: narrative_description
+        description: Incident description (source narrative).
+      - name: narrative_activity
+        description: What the employee was doing (source narrative).
+      - name: narrative_event
+        description: What happened (source narrative).
+      - name: narrative_injury
+        description: Injury or illness description (source narrative).
+      - name: narrative_source
+        description: Object or substance involved (source narrative).
+
+  - name: mart_llm_eval
+    description: >
+      LLM-versus-OIICS agreement, one row per industry sector and severity tier.
+      Both classifications are mapped to a common coarse event taxonomy before
+      comparison.
+    columns:
+      - name: eval_id
+        description: Surrogate key of sector and severity tier. Primary key.
+        tests:
+          - not_null
+          - unique
+      - name: sector
+        description: Industry sector (from the NAICS sector mapping).
+        tests:
+          - not_null
+      - name: severity_tier
+        description: LLM severity tier for the group.
+        tests:
+          - not_null
+      - name: incidents_evaluated
+        description: Incidents in the group with both an LLM and an OIICS event.
+      - name: incidents_in_agreement
+        description: Incidents in the group where the two coarse events agreed.
+      - name: agreement_rate
+        description: Fraction of evaluated incidents that agreed (0 to 1).
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 1

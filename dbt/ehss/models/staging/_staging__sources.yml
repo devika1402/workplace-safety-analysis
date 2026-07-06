@@ -1,0 +1,43 @@
+version: 2
+
+sources:
+  - name: osha
+    description: >
+      Raw OSHA ITA data landed by ingestion.load_raw: untyped (all text),
+      column names lowercased and snake_cased, values otherwise preserved.
+    schema: raw
+    tables:
+      - name: osha_case_detail
+        description: >
+          One row per reported OSHA case (Forms 300 and 301), CY2024, as
+          published: PII-stripped NEW_ narrative fields and BLS SOII autocoder
+          OIICS codes (the _pred columns). There is no separate establishments
+          table; establishment attributes are columns here and the establishment
+          entity is derived in stg_osha__establishments.
+        # Freshness is exercised by `dbt source freshness`, not `dbt build`. The
+        # load timestamp is a SAS-formatted string, so it is parsed inline.
+        loaded_at_field: "to_timestamp(created_timestamp, 'DDMONYYYY:HH24:MI:SS')"
+        freshness:
+          warn_after: {count: 90, period: day}
+        columns:
+          - name: id
+            description: OSHA case id. Natural primary key of the case grain.
+            tests:
+              - not_null
+              - unique
+          - name: establishment_id
+            description: >
+              OSHA establishment id. Natural key for the establishment entity.
+              Not unique here (many cases per establishment).
+            tests:
+              - not_null
+      - name: llm_enrichment
+        description: >
+          LLM incident classifications written by the enrichment step, keyed on
+          incident_id. Typed columns (not raw text).
+        columns:
+          - name: incident_id
+            description: Surrogate incident id this classification belongs to.
+            tests:
+              - not_null
+              - unique
